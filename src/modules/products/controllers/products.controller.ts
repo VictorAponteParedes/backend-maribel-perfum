@@ -35,6 +35,11 @@ export class ProductsController {
     return await this.productsService.createBrand(createBrandDto);
   }
 
+  @Get('stock-entries')
+  async findAllStockEntries() {
+    return await this.productsService.findAllStockEntries();
+  }
+
   @Get('barcode/:barcode')
   async findByBarcode(@Param('barcode') barcode: string) {
     return await this.productsService.findByBarcode(barcode);

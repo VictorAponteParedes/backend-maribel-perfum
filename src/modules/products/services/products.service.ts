@@ -482,4 +482,27 @@ export class ProductsService {
 
     return brand;
   }
+
+  async findAllStockEntries(limit = 100) {
+    const entries = await this.stockEntryRepository.find({
+      relations: { product: { brand: true } },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+
+    return entries.map((e) => ({
+      id: e.id,
+      barcode: e.product?.barcode || '',
+      brand: e.product?.brand?.name || '',
+      name: e.product?.name || '',
+      size: e.product?.size || '',
+      quantity: e.quantity,
+      date: e.entryDate
+        ? new Date(e.entryDate).toLocaleDateString('es-ES')
+        : new Date(e.createdAt).toLocaleDateString('es-ES'),
+      unitCost: Number(e.unitCost || 0),
+      totalCost: Number(e.totalCost || (e.unitCost ? Number(e.unitCost) * e.quantity : 0)),
+      batchNumber: e.batchNumber ?? undefined,
+    }));
+  }
 }
