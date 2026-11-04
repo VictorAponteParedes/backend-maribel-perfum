@@ -6,6 +6,20 @@ import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import { FilterCustomersDto } from '../dto/filter-customers.dto';
 
+function normalizeDate(str?: string): string | null {
+  if (!str) return null;
+  const trimmed = str.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes('/')) {
+    const parts = trimmed.split('/');
+    if (parts.length === 3) {
+      const [d, m, y] = parts;
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+  }
+  return trimmed;
+}
+
 @Injectable()
 export class CustomersService {
   constructor(
@@ -14,10 +28,22 @@ export class CustomersService {
   ) {}
 
   async findAll(filterDto: FilterCustomersDto) {
-    const { search, isActive, page = 1, limit = 50 } = filterDto;
+    const {
+      search,
+      code,
+      name,
+      phone,
+      registrationDate,
+      startDate,
+      endDate,
+      isActive,
+      page = 1,
+      limit = 50,
+    } = filterDto;
 
     const query = this.customerRepository.createQueryBuilder('customer');
 
+    // 1. Búsqueda rápida general
     if (search) {
       const searchNum = Number(search);
       if (!isNaN(searchNum)) {
@@ -31,6 +57,51 @@ export class CustomersService {
           { search: `%${search}%` },
         );
       }
+    }
+
+    // 2. Filtro específico por Código
+    if (code !== undefined && code !== null) {
+      query.andWhere('customer.code = :code', { code });
+    }
+
+    // 3. Filtro específico por Nombre
+    if (name) {
+      query.andWhere('LOWER(customer.name) LIKE LOWER(:name)', {
+        name: `%${name.trim()}%`,
+      });
+    }
+
+    // 4. Filtro específico por Teléfono (coincidencia de dígitos)
+    if (phone) {
+      query.andWhere('customer.phone LIKE :phone', {
+        phone: `%${phone.trim()}%`,
+      });
+    }
+
+    // 5. Filtro específico por Fecha exacta (YYYY-MM-DD o DD/MM/YYYY)
+    const normalizedReg = normalizeDate(registrationDate);
+    if (normalizedReg) {
+      query.andWhere(
+        "TO_CHAR(customer.createdAt, 'YYYY-MM-DD') = :normalizedReg",
+        { normalizedReg },
+      );
+    }
+
+    // 6. Filtro por Rango de Fechas: Desde (startDate) - Hasta (endDate)
+    const normalizedStart = normalizeDate(startDate);
+    if (normalizedStart) {
+      query.andWhere(
+        "TO_CHAR(customer.createdAt, 'YYYY-MM-DD') >= :normalizedStart",
+        { normalizedStart },
+      );
+    }
+
+    const normalizedEnd = normalizeDate(endDate);
+    if (normalizedEnd) {
+      query.andWhere(
+        "TO_CHAR(customer.createdAt, 'YYYY-MM-DD') <= :normalizedEnd",
+        { normalizedEnd },
+      );
     }
 
     if (isActive !== undefined) {
