@@ -13,6 +13,20 @@ import { ProductEntity } from '../../products/entities/product.entity';
 import { InventoryStockEntity } from '../../products/entities/inventory-stock.entity';
 import { OrderEntity, OrderStatus, PaymentStatus } from '../../orders/entities/order.entity';
 
+function normalizeDate(str?: string): string | null {
+  if (!str) return null;
+  const trimmed = str.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes('/')) {
+    const parts = trimmed.split('/');
+    if (parts.length === 3) {
+      const [d, m, y] = parts;
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+  }
+  return trimmed;
+}
+
 @Injectable()
 export class SalesService {
   constructor(
@@ -24,7 +38,7 @@ export class SalesService {
   ) {}
 
   async findAll(filterDto: FilterSalesDto) {
-    const { search, status, page = 1, limit = 50 } = filterDto;
+    const { search, startDate, endDate, status, page = 1, limit = 50 } = filterDto;
 
     const query = this.saleRepository
       .createQueryBuilder('sale')
@@ -52,6 +66,20 @@ export class SalesService {
         )`,
         { search: `%${search}%` },
       );
+    }
+
+    const normalizedStart = normalizeDate(startDate);
+    if (normalizedStart) {
+      query.andWhere("TO_CHAR(sale.createdAt, 'YYYY-MM-DD') >= :normalizedStart", {
+        normalizedStart,
+      });
+    }
+
+    const normalizedEnd = normalizeDate(endDate);
+    if (normalizedEnd) {
+      query.andWhere("TO_CHAR(sale.createdAt, 'YYYY-MM-DD') <= :normalizedEnd", {
+        normalizedEnd,
+      });
     }
 
     query
@@ -91,7 +119,7 @@ export class SalesService {
     return sale;
   }
 
-  async create(createDto: CreateSaleDto): Promise<SaleEntity> {
+  async create(createDto: CreateSaleDto) {
     if (!createDto.items || createDto.items.length === 0) {
       throw new BadRequestException('La venta debe incluir al menos un producto.');
     }
@@ -189,7 +217,8 @@ export class SalesService {
 
       await queryRunner.commitTransaction();
 
-      return await this.findById(savedSale.id);
+      const completeSale = await this.findById(savedSale.id);
+      return this.mapToFrontendSale(completeSale);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -241,7 +270,7 @@ export class SalesService {
     return `VTA-${year}-${sequence}`;
   }
 
-  private mapToFrontendSale(s: SaleEntity) {
+  public mapToFrontendSale(s: SaleEntity) {
     const dateFormatted = s.createdAt
       ? new Date(s.createdAt).toLocaleDateString('es-ES')
       : '';

@@ -8,6 +8,14 @@ export class FilterSalesDto {
   search?: string;
 
   @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+
+  @IsOptional()
   @IsEnum(SaleStatus)
   status?: SaleStatus;
 

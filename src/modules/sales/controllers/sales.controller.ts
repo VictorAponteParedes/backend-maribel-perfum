@@ -27,7 +27,8 @@ export class SalesController {
 
   @Get(':id')
   async findById(@Param('id') id: string) {
-    return await this.salesService.findById(id);
+    const sale = await this.salesService.findById(id);
+    return this.salesService.mapToFrontendSale(sale);
   }
 
   @Post()
