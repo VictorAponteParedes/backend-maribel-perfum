@@ -133,6 +133,7 @@ export class ProductsService implements OnModuleInit {
           ? new Date(p.receptionDate).toLocaleDateString('es-ES')
           : '',
         isActive: p.isActive,
+        imageId: p.imageId ?? null,
         imageUrl: p.image?.url ?? null,
       };
     });

@@ -26,7 +26,9 @@ export class FilesService {
       throw new BadRequestException('No se ha proporcionado ningún archivo.');
     }
 
-    const publicUrl = `/files/stream/${file.filename}`;
+    const baseUrl =
+      process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const publicUrl = `${baseUrl}/api/v1/files/stream/${file.filename}`;
 
     const newFile = this.fileRepository.create({
       filename: file.filename,
