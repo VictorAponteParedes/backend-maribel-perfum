@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProductEntity } from './entities/product.entity';
 import { BrandEntity } from './entities/brand.entity';
+import { CategoryEntity } from './entities/category.entity';
 import { InventoryStockEntity } from './entities/inventory-stock.entity';
 import { StockEntryEntity } from './entities/stock-entry.entity';
 import { FileEntity } from '../files/entities/file.entity';
@@ -14,6 +15,7 @@ import { FilesModule } from '../files/files.module';
     TypeOrmModule.forFeature([
       ProductEntity,
       BrandEntity,
+      CategoryEntity,
       InventoryStockEntity,
       StockEntryEntity,
       FileEntity,

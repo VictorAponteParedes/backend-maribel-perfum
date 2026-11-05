@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "."
+		},
+		{
+			"path": "../web-maribel-perfum"
 		}
 	],
 	"settings": {}

@@ -12,6 +12,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { BrandEntity } from './brand.entity';
+import { CategoryEntity } from './category.entity';
 import { InventoryStockEntity } from './inventory-stock.entity';
 import { StockEntryEntity } from './stock-entry.entity';
 import { FileEntity } from '../../files/entities/file.entity';
@@ -34,8 +35,30 @@ export class ProductEntity {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  category: string | null;
+  @Column({ name: 'category_id', type: 'uuid', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne(() => CategoryEntity, (category) => category.products, {
+    nullable: true,
+    eager: true,
+  })
+  @JoinColumn({ name: 'category_id' })
+  category: CategoryEntity | null;
+
+  @Column({ name: 'is_web_visible', type: 'boolean', default: false })
+  isWebVisible: boolean;
+
+  @Column({ name: 'web_badge', type: 'varchar', length: 100, nullable: true })
+  webBadge: string | null;
+
+  @Column({
+    name: 'web_price',
+    type: 'numeric',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
+  webPrice: number | null;
 
   @Column({
     name: 'cost_price',

@@ -3,11 +3,13 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { ProductEntity } from '../entities/product.entity';
 import { BrandEntity } from '../entities/brand.entity';
+import { CategoryEntity } from '../entities/category.entity';
 import { InventoryStockEntity } from '../entities/inventory-stock.entity';
 import { StockEntryEntity } from '../entities/stock-entry.entity';
 import { CreateProductDto } from '../dto/create-product.dto';
@@ -16,20 +18,40 @@ import { FilterProductsDto } from '../dto/filter-products.dto';
 import { CreateStockEntryDto } from '../dto/create-stock-entry.dto';
 import { BulkImportProductsDto } from '../dto/bulk-import-products.dto';
 import { CreateBrandDto } from '../dto/create-brand.dto';
+import { CreateCategoryDto } from '../dto/create-category.dto';
 
 @Injectable()
-export class ProductsService {
+export class ProductsService implements OnModuleInit {
   constructor(
     @InjectRepository(ProductEntity)
     private readonly productRepository: Repository<ProductEntity>,
     @InjectRepository(BrandEntity)
     private readonly brandRepository: Repository<BrandEntity>,
+    @InjectRepository(CategoryEntity)
+    private readonly categoryRepository: Repository<CategoryEntity>,
     @InjectRepository(InventoryStockEntity)
     private readonly stockRepository: Repository<InventoryStockEntity>,
     @InjectRepository(StockEntryEntity)
     private readonly stockEntryRepository: Repository<StockEntryEntity>,
     private readonly dataSource: DataSource,
   ) {}
+
+  async onModuleInit() {
+    const count = await this.categoryRepository.count();
+    if (count === 0) {
+      const defaults = [
+        { name: 'Femenino', slug: 'femenino', displayOrder: 1 },
+        { name: 'Masculino', slug: 'masculino', displayOrder: 2 },
+        { name: 'Árabe', slug: 'arabe', displayOrder: 3 },
+        { name: 'Unisex', slug: 'unisex', displayOrder: 4 },
+      ];
+      for (const d of defaults) {
+        await this.categoryRepository.save(
+          this.categoryRepository.create({ ...d, isActive: true }),
+        );
+      }
+    }
+  }
 
   async findAll(filterDto: FilterProductsDto) {
     const {
@@ -45,6 +67,7 @@ export class ProductsService {
     const query = this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.brand', 'brand')
+      .leftJoinAndSelect('product.category', 'category')
       .leftJoinAndSelect('product.image', 'image')
       .leftJoinAndSelect('product.stock', 'stock');
 
@@ -60,7 +83,10 @@ export class ProductsService {
     }
 
     if (category) {
-      query.andWhere('product.category = :category', { category });
+      query.andWhere(
+        '(LOWER(category.slug) = LOWER(:category) OR LOWER(category.name) = LOWER(:category))',
+        { category },
+      );
     }
 
     if (isActive !== undefined) {
@@ -90,12 +116,18 @@ export class ProductsService {
         brand: p.brand?.name ?? '',
         name: p.name,
         size: p.size,
+        category: p.category?.name ?? '',
+        categoryId: p.categoryId ?? null,
+        categorySlug: p.category?.slug ?? null,
         totalIn: p.stock?.totalIn ?? 0,
         totalSold: p.stock?.totalSold ?? 0,
         stock: p.stock?.currentStock ?? 0,
         costPrice: cost,
         price,
         profit,
+        isWebVisible: p.isWebVisible ?? false,
+        webBadge: p.webBadge ?? null,
+        webPrice: p.webPrice ? Number(p.webPrice) : null,
         receptionDate: p.receptionDate
           ? new Date(p.receptionDate).toLocaleDateString('es-ES')
           : '',
@@ -120,6 +152,7 @@ export class ProductsService {
       where: { id },
       relations: {
         brand: true,
+        category: true,
         image: true,
         stock: true,
         stockEntries: true,
@@ -143,6 +176,7 @@ export class ProductsService {
       where: { barcode },
       relations: {
         brand: true,
+        category: true,
         image: true,
         stock: true,
       },
@@ -158,8 +192,15 @@ export class ProductsService {
       );
     }
 
-    // 2. Buscar o crear la Marca
+    // 2. Buscar o crear la Marca y Categoría
     const brand = await this.findOrCreateBrand(createDto.brandName);
+    let categoryId = createDto.categoryId ?? null;
+    if (!categoryId && (createDto.categoryName || createDto.category)) {
+      const cat = await this.findOrCreateCategory(
+        createDto.categoryName || createDto.category!,
+      );
+      categoryId = cat.id;
+    }
 
     // 3. Crear en transacción atómica
     const queryRunner = this.dataSource.createQueryRunner();
@@ -174,12 +215,15 @@ export class ProductsService {
         name: createDto.name,
         size: createDto.size ?? '100 ml',
         description: createDto.description ?? null,
-        category: createDto.category ?? null,
+        categoryId,
         costPrice: createDto.costPrice ?? null,
         sellingPrice: createDto.sellingPrice ?? null,
         brandId: brand.id,
         imageId: createDto.imageId ?? null,
         isActive: createDto.isActive ?? true,
+        isWebVisible: createDto.isWebVisible ?? false,
+        webBadge: createDto.webBadge ?? null,
+        webPrice: createDto.webPrice ?? null,
         receptionDate: createDto.receptionDate ? new Date(createDto.receptionDate) : null,
       });
 
@@ -243,11 +287,21 @@ export class ProductsService {
     if (updateDto.name !== undefined) product.name = updateDto.name;
     if (updateDto.size !== undefined) product.size = updateDto.size;
     if (updateDto.description !== undefined) product.description = updateDto.description;
-    if (updateDto.category !== undefined) product.category = updateDto.category;
+    if (updateDto.categoryId !== undefined) {
+      product.categoryId = updateDto.categoryId;
+    } else if (updateDto.categoryName || updateDto.category) {
+      const cat = await this.findOrCreateCategory(
+        updateDto.categoryName || updateDto.category!,
+      );
+      product.categoryId = cat.id;
+    }
     if (updateDto.costPrice !== undefined) product.costPrice = updateDto.costPrice;
     if (updateDto.sellingPrice !== undefined) product.sellingPrice = updateDto.sellingPrice;
     if (updateDto.imageId !== undefined) product.imageId = updateDto.imageId;
     if (updateDto.isActive !== undefined) product.isActive = updateDto.isActive;
+    if (updateDto.isWebVisible !== undefined) product.isWebVisible = updateDto.isWebVisible;
+    if (updateDto.webBadge !== undefined) product.webBadge = updateDto.webBadge;
+    if (updateDto.webPrice !== undefined) product.webPrice = updateDto.webPrice;
     if (updateDto.receptionDate !== undefined) {
       product.receptionDate = updateDto.receptionDate ? new Date(updateDto.receptionDate) : null;
     }
@@ -335,6 +389,12 @@ export class ProductsService {
       for (const item of bulkDto.items) {
         try {
           const brand = await this.findOrCreateBrand(item.brandName);
+          let categoryId: string | null = null;
+          if (item.category) {
+            const cat = await this.findOrCreateCategory(item.category);
+            categoryId = cat.id;
+          }
+
           const existing = await queryRunner.manager.findOne(ProductEntity, {
             where: { barcode: item.barcode },
             relations: { stock: true },
@@ -385,7 +445,7 @@ export class ProductsService {
               barcode: item.barcode,
               name: item.name,
               size: item.size ?? '100 ml',
-              category: item.category ?? null,
+              categoryId,
               costPrice: item.costPrice ?? null,
               sellingPrice: item.sellingPrice ?? null,
               brandId: brand.id,
@@ -467,6 +527,68 @@ export class ProductsService {
     });
 
     return await this.brandRepository.save(brand);
+  }
+
+  // --- Métodos de Categorías (Categories) ---
+  async findAllCategories(): Promise<CategoryEntity[]> {
+    return await this.categoryRepository.find({
+      order: { displayOrder: 'ASC', name: 'ASC' },
+    });
+  }
+
+  async createCategory(createCategoryDto: CreateCategoryDto): Promise<CategoryEntity> {
+    const trimmed = createCategoryDto.name.trim();
+    const existing = await this.categoryRepository.findOne({
+      where: [{ name: trimmed }],
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const slug =
+      createCategoryDto.slug ||
+      trimmed
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+
+    const category = this.categoryRepository.create({
+      name: trimmed,
+      slug,
+      description: createCategoryDto.description ?? null,
+      displayOrder: createCategoryDto.displayOrder ?? 0,
+      isActive: createCategoryDto.isActive ?? true,
+    });
+
+    return await this.categoryRepository.save(category);
+  }
+
+  private async findOrCreateCategory(categoryName: string): Promise<CategoryEntity> {
+    const trimmed = categoryName?.trim() || 'Unisex';
+    let category = await this.categoryRepository.findOne({
+      where: [{ name: trimmed }, { slug: trimmed.toLowerCase() }],
+    });
+
+    if (!category) {
+      const slug = trimmed
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+
+      category = this.categoryRepository.create({
+        name: trimmed,
+        slug: slug || 'general',
+        isActive: true,
+      });
+      category = await this.categoryRepository.save(category);
+    }
+
+    return category;
   }
 
   private async findOrCreateBrand(brandName: string): Promise<BrandEntity> {

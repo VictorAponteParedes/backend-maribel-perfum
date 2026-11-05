@@ -11,6 +11,8 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CombosModule } from './modules/combos/combos.module';
+import { WebSettingsModule } from './modules/web-settings/web-settings.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { AuthModule } from './modules/auth/auth.module';
     SalesModule,
     UsersModule,
     AuthModule,
+    CombosModule,
+    WebSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

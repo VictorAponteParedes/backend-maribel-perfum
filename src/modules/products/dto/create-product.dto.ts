@@ -35,6 +35,27 @@ export class CreateProductDto {
   category?: string;
 
   @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @IsOptional()
+  @IsString()
+  categoryName?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isWebVisible?: boolean;
+
+  @IsOptional()
+  @IsString()
+  webBadge?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  webPrice?: number;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   costPrice?: number;
