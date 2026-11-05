@@ -19,6 +19,7 @@ import { CreateStockEntryDto } from '../dto/create-stock-entry.dto';
 import { BulkImportProductsDto } from '../dto/bulk-import-products.dto';
 import { CreateBrandDto } from '../dto/create-brand.dto';
 import { CreateCategoryDto } from '../dto/create-category.dto';
+import { UpdateCategoryDto } from '../dto/update-category.dto';
 
 @Injectable()
 export class ProductsService implements OnModuleInit {
@@ -531,9 +532,14 @@ export class ProductsService implements OnModuleInit {
 
   // --- Métodos de Categorías (Categories) ---
   async findAllCategories(): Promise<CategoryEntity[]> {
-    return await this.categoryRepository.find({
+    const categories = await this.categoryRepository.find({
+      relations: { products: true },
       order: { displayOrder: 'ASC', name: 'ASC' },
     });
+    return categories.map((cat) => ({
+      ...cat,
+      productCount: cat.products ? cat.products.length : 0,
+    })) as unknown as CategoryEntity[];
   }
 
   async createCategory(createCategoryDto: CreateCategoryDto): Promise<CategoryEntity> {
@@ -564,6 +570,52 @@ export class ProductsService implements OnModuleInit {
     });
 
     return await this.categoryRepository.save(category);
+  }
+
+  async findCategoryById(id: string): Promise<CategoryEntity> {
+    const category = await this.categoryRepository.findOne({ where: { id } });
+    if (!category) {
+      throw new NotFoundException(`Categoría con ID "${id}" no encontrada.`);
+    }
+    return category;
+  }
+
+  async updateCategory(
+    id: string,
+    updateCategoryDto: UpdateCategoryDto,
+  ): Promise<CategoryEntity> {
+    const category = await this.findCategoryById(id);
+
+    if (updateCategoryDto.name !== undefined) {
+      category.name = updateCategoryDto.name.trim();
+    }
+    if (updateCategoryDto.slug !== undefined) {
+      category.slug = updateCategoryDto.slug.trim().toLowerCase();
+    }
+    if (updateCategoryDto.description !== undefined) {
+      category.description = updateCategoryDto.description.trim();
+    }
+    if (updateCategoryDto.displayOrder !== undefined) {
+      category.displayOrder = updateCategoryDto.displayOrder;
+    }
+    if (updateCategoryDto.isActive !== undefined) {
+      category.isActive = updateCategoryDto.isActive;
+    }
+
+    return await this.categoryRepository.save(category);
+  }
+
+  async deleteCategory(id: string): Promise<{ id: string; deleted: boolean }> {
+    await this.findCategoryById(id);
+
+    // Desvincular productos antes de eliminar para no violar integridad referencial
+    await this.productRepository.update(
+      { categoryId: id },
+      { categoryId: null },
+    );
+
+    await this.categoryRepository.delete(id);
+    return { id, deleted: true };
   }
 
   private async findOrCreateCategory(categoryName: string): Promise<CategoryEntity> {

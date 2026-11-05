@@ -16,6 +16,7 @@ import { CreateStockEntryDto } from '../dto/create-stock-entry.dto';
 import { BulkImportProductsDto } from '../dto/bulk-import-products.dto';
 import { CreateBrandDto } from '../dto/create-brand.dto';
 import { CreateCategoryDto } from '../dto/create-category.dto';
+import { UpdateCategoryDto } from '../dto/update-category.dto';
 
 @Controller('products')
 export class ProductsController {
@@ -44,6 +45,24 @@ export class ProductsController {
   @Post('categories')
   async createCategory(@Body() createCategoryDto: CreateCategoryDto) {
     return await this.productsService.createCategory(createCategoryDto);
+  }
+
+  @Get('categories/:id')
+  async findCategoryById(@Param('id') id: string) {
+    return await this.productsService.findCategoryById(id);
+  }
+
+  @Patch('categories/:id')
+  async updateCategory(
+    @Param('id') id: string,
+    @Body() updateCategoryDto: UpdateCategoryDto,
+  ) {
+    return await this.productsService.updateCategory(id, updateCategoryDto);
+  }
+
+  @Delete('categories/:id')
+  async deleteCategory(@Param('id') id: string) {
+    return await this.productsService.deleteCategory(id);
   }
 
   @Get('stock-entries')
