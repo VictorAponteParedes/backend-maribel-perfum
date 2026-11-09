@@ -52,7 +52,7 @@ export class CombosController {
     return await this.combosService.toggleActive(id);
   }
 
-  @RequirePermissions(Permission.COMBOS_MANAGE)
+  @RequirePermissions(Permission.COMBOS_DELETE)
   @Delete(':id')
   async remove(@Param('id') id: string) {
     return await this.combosService.remove(id);

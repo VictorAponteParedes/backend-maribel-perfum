@@ -16,6 +16,7 @@ export enum Permission {
   // Combos
   COMBOS_VIEW = 'combos:view',
   COMBOS_MANAGE = 'combos:manage',
+  COMBOS_DELETE = 'combos:delete',
 
   // Ventas (POS)
   SALES_VIEW = 'sales:view',
@@ -60,7 +61,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     Permission.ORDERS_UPDATE,
     Permission.CUSTOMERS_VIEW,
     Permission.CUSTOMERS_MANAGE,
-    Permission.SETTINGS_VIEW,
     Permission.FILES_UPLOAD,
   ],
   [UserRole.STAFF]: [

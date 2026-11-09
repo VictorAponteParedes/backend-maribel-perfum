@@ -10,7 +10,8 @@ import { UsersService } from '../../users/services/users.service';
 import { LoginDto } from '../dto/login.dto';
 import { RegisterDto } from '../dto/register.dto';
 import { JwtPayload } from '../strategies/jwt.strategy';
-import { UserEntity } from '../../users/entities/user.entity';
+import { UserEntity, UserRole } from '../../users/entities/user.entity';
+import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/enums/permission.enum';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +20,27 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
+
+  private mapUserResponse(user: UserEntity) {
+    const rawPermissions = user.permissions || [];
+    const hasWildcard = rawPermissions.includes('*');
+
+    const effectivePermissions =
+      user.role === UserRole.ADMIN
+        ? ['*']
+        : hasWildcard || rawPermissions.length === 0
+        ? DEFAULT_ROLE_PERMISSIONS[user.role] || []
+        : rawPermissions.filter((p) => p !== '*');
+
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      permissions: effectivePermissions,
+      avatarUrl: user.avatar?.url ?? null,
+    };
+  }
 
   async login(loginDto: LoginDto) {
     const user = await this.usersService.findByEmail(loginDto.email, true);
@@ -44,14 +66,7 @@ export class AuthService {
     await this.usersService.updateRefreshToken(user.id, tokens.refreshToken);
 
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-        permissions: user.permissions,
-        avatarUrl: user.avatar?.url ?? null,
-      },
+      user: this.mapUserResponse(user),
       token: tokens.accessToken,
       refreshToken: tokens.refreshToken,
     };
@@ -63,14 +78,7 @@ export class AuthService {
     await this.usersService.updateRefreshToken(user.id, tokens.refreshToken);
 
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-        permissions: user.permissions,
-        avatarUrl: user.avatar?.url ?? null,
-      },
+      user: this.mapUserResponse(user),
       token: tokens.accessToken,
       refreshToken: tokens.refreshToken,
     };
@@ -104,24 +112,18 @@ export class AuthService {
       await this.usersService.updateRefreshToken(user.id, tokens.refreshToken);
 
       return {
+        user: this.mapUserResponse(user),
         token: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       };
     } catch {
-      throw new UnauthorizedException('Token de actualización expirado o inválido.');
+      throw new UnauthorizedException('Token de actualización inválido o expirado.');
     }
   }
 
   async getProfile(userId: string) {
     const user = await this.usersService.findById(userId);
-    return {
-      id: user.id,
-      email: user.email,
-      fullName: user.fullName,
-      role: user.role,
-      permissions: user.permissions,
-      avatarUrl: user.avatar?.url ?? null,
-    };
+    return this.mapUserResponse(user);
   }
 
   private async generateTokens(user: UserEntity) {
