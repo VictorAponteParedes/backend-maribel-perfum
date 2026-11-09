@@ -152,6 +152,15 @@ export class WebSettingEntity {
   @Column({ name: 'delivery_rates', type: 'jsonb', nullable: true })
   deliveryRates: DeliveryRate[] | null;
 
+  @Column({ name: 'show_stock_in_web', type: 'boolean', default: true })
+  showStockInWeb: boolean;
+
+  @Column({ name: 'low_stock_threshold', type: 'int', default: 5 })
+  lowStockThreshold: number;
+
+  @Column({ name: 'block_out_of_stock_orders', type: 'boolean', default: true })
+  blockOutOfStockOrders: boolean;
+
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 }

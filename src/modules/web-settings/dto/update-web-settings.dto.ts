@@ -97,4 +97,17 @@ export class UpdateWebSettingsDto {
   @IsOptional()
   @IsArray()
   deliveryRates?: DeliveryRate[];
+
+  @IsOptional()
+  @IsBoolean()
+  showStockInWeb?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  lowStockThreshold?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  blockOutOfStockOrders?: boolean;
 }

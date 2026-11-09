@@ -175,26 +175,30 @@ export class SalesService {
 
         // 1. Buscar producto por código de barras o UUID si no viene productId
         let productId = item.productId ?? null;
+        let resolvedBarcode = item.barcode;
         const isUuid =
           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-            item.barcode,
+            item.barcode.trim(),
           );
 
         if (!productId) {
-          const whereConditions: any[] = [{ barcode: item.barcode }];
+          const whereConditions: Array<{ barcode?: string; id?: string }> = [
+            { barcode: item.barcode.trim() },
+          ];
           if (isUuid) {
-            whereConditions.push({ id: item.barcode });
+            whereConditions.push({ id: item.barcode.trim().toLowerCase() });
           }
           const product = await queryRunner.manager.findOne(ProductEntity, {
             where: whereConditions,
           });
           if (product) {
             productId = product.id;
+            resolvedBarcode = product.barcode || item.barcode;
           }
         }
 
         const saleItem = queryRunner.manager.create(SaleItemEntity, {
-          barcode: item.barcode,
+          barcode: resolvedBarcode,
           brand: item.brand,
           name: item.name,
           size: item.size ?? '100 ml',
@@ -206,7 +210,7 @@ export class SalesService {
 
         saleItems.push(saleItem);
 
-        // 2. Descontar stock de inventario automáticamente
+        // 2. Validar y descontar stock de inventario automáticamente
         if (productId) {
           const stock = await queryRunner.manager.findOne(
             InventoryStockEntity,
@@ -215,6 +219,13 @@ export class SalesService {
             },
           );
 
+          const availableStock = stock ? stock.currentStock : 0;
+          if (availableStock < item.quantity) {
+            throw new BadRequestException(
+              `Stock insuficiente para "${item.name}". Disponible en inventario: ${availableStock} uds, intentas facturar: ${item.quantity} uds.`,
+            );
+          }
+
           if (stock) {
             stock.currentStock -= item.quantity;
             stock.totalSold += item.quantity;
@@ -222,7 +233,7 @@ export class SalesService {
           }
         } else if (isUuid) {
           const combo = await queryRunner.manager.findOne(ComboEntity, {
-            where: { id: item.barcode },
+            where: { id: item.barcode.trim().toLowerCase() },
             relations: { items: true },
           });
           if (combo && combo.items) {
@@ -233,8 +244,14 @@ export class SalesService {
                   where: { productId: cItem.productId },
                 },
               );
+              const qtyToDeduct = cItem.quantity * item.quantity;
+              const availableStock = stock ? stock.currentStock : 0;
+              if (availableStock < qtyToDeduct) {
+                throw new BadRequestException(
+                  `Stock insuficiente para cubrir el combo "${item.name}". Disponible: ${availableStock} uds, requerido: ${qtyToDeduct} uds.`,
+                );
+              }
               if (stock) {
-                const qtyToDeduct = cItem.quantity * item.quantity;
                 stock.currentStock -= qtyToDeduct;
                 stock.totalSold += qtyToDeduct;
                 await queryRunner.manager.save(InventoryStockEntity, stock);

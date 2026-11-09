@@ -9,6 +9,7 @@ import { OrderEntity, OrderStatus } from '../entities/order.entity';
 import { OrderItemEntity } from '../entities/order-item.entity';
 import { OrderLocationEntity } from '../entities/order-location.entity';
 import { ProductEntity } from '../../products/entities/product.entity';
+import { InventoryStockEntity } from '../../products/entities/inventory-stock.entity';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { FilterOrdersDto } from '../dto/filter-orders.dto';
 
@@ -115,20 +116,53 @@ export class OrdersService {
         subtotal += itemSubtotal;
         totalQuantity += item.quantity;
 
-        // Validar si el productId existe realmente en la base de datos para no violar la FK
+        // Validar si el producto existe por productId o por barcode (UUID o código real)
         let validProductId: string | null = null;
-        if (item.productId) {
-          const productExists = await queryRunner.manager.findOne(
-            ProductEntity,
-            { where: { id: item.productId } }
+        let resolvedBarcode = item.barcode;
+        const isBarcodeUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            item.barcode?.trim() || '',
           );
-          if (productExists) {
-            validProductId = item.productId;
+
+        const candidateId = item.productId
+          ? item.productId.toLowerCase()
+          : isBarcodeUuid
+            ? item.barcode.trim().toLowerCase()
+            : null;
+
+        let matchedProduct: ProductEntity | null = null;
+        if (candidateId) {
+          matchedProduct = await queryRunner.manager.findOne(ProductEntity, {
+            where: { id: candidateId },
+          });
+        }
+        if (!matchedProduct && item.barcode) {
+          matchedProduct = await queryRunner.manager.findOne(ProductEntity, {
+            where: { barcode: item.barcode.trim() },
+          });
+        }
+
+        if (matchedProduct) {
+          validProductId = matchedProduct.id;
+          resolvedBarcode = matchedProduct.barcode || item.barcode;
+
+          const stockRecord = await queryRunner.manager.findOne(
+            InventoryStockEntity,
+            { where: { productId: matchedProduct.id } },
+          );
+          const availableStock = stockRecord ? stockRecord.currentStock : 0;
+
+          if (availableStock < item.quantity) {
+            throw new BadRequestException(
+              availableStock <= 0
+                ? `El producto "${matchedProduct.name}" se encuentra agotado actualmente.`
+                : `Stock insuficiente para "${matchedProduct.name}". Solo quedan ${availableStock} unidades disponibles y solicitaste ${item.quantity}.`,
+            );
           }
         }
 
         const orderItem = queryRunner.manager.create(OrderItemEntity, {
-          barcode: item.barcode,
+          barcode: resolvedBarcode,
           brand: item.brand,
           name: item.name,
           size: item.size ?? null,
@@ -294,6 +328,7 @@ export class OrdersService {
           }
         : undefined,
       items: (o.items || []).map((it) => ({
+        productId: it.productId ?? undefined,
         barcode: it.barcode,
         brand: it.brand,
         name: it.name,

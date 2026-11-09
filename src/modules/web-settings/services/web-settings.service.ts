@@ -116,6 +116,12 @@ export class WebSettingsService implements OnModuleInit {
     if (dto.bankDetails !== undefined) setting.bankDetails = dto.bankDetails;
     if (dto.deliveryRates !== undefined)
       setting.deliveryRates = dto.deliveryRates;
+    if (dto.showStockInWeb !== undefined)
+      setting.showStockInWeb = dto.showStockInWeb;
+    if (dto.lowStockThreshold !== undefined)
+      setting.lowStockThreshold = dto.lowStockThreshold;
+    if (dto.blockOutOfStockOrders !== undefined)
+      setting.blockOutOfStockOrders = dto.blockOutOfStockOrders;
 
     return await this.settingsRepository.save(setting);
   }
