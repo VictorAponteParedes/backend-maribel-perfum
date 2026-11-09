@@ -94,6 +94,9 @@ export class ProductEntity {
   @JoinColumn({ name: 'image_id' })
   image: FileEntity | null;
 
+  @Column({ type: 'jsonb', nullable: true, default: () => "'[]'" })
+  images: string[];
+
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 

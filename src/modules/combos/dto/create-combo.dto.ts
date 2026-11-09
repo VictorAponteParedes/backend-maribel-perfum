@@ -38,6 +38,11 @@ export class CreateComboDto {
   imageUrl?: string;
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 

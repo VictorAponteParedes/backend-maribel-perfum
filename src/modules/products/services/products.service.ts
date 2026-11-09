@@ -222,6 +222,7 @@ export class ProductsService implements OnModuleInit {
         sellingPrice: createDto.sellingPrice ?? null,
         brandId: brand.id,
         imageId: createDto.imageId ?? null,
+        images: createDto.images ?? [],
         isActive: createDto.isActive ?? true,
         isWebVisible: createDto.isWebVisible ?? false,
         webBadge: createDto.webBadge ?? null,
@@ -300,6 +301,7 @@ export class ProductsService implements OnModuleInit {
     if (updateDto.costPrice !== undefined) product.costPrice = updateDto.costPrice;
     if (updateDto.sellingPrice !== undefined) product.sellingPrice = updateDto.sellingPrice;
     if (updateDto.imageId !== undefined) product.imageId = updateDto.imageId;
+    if (updateDto.images !== undefined) product.images = updateDto.images;
     if (updateDto.isActive !== undefined) product.isActive = updateDto.isActive;
     if (updateDto.isWebVisible !== undefined) product.isWebVisible = updateDto.isWebVisible;
     if (updateDto.webBadge !== undefined) product.webBadge = updateDto.webBadge;

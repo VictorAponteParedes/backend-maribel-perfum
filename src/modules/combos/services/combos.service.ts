@@ -118,6 +118,7 @@ export class CombosService {
         savingsAmount,
         imageId: createDto.imageId ?? null,
         imageUrl: createDto.imageUrl?.trim() || null,
+        images: createDto.images ?? [],
         isActive: createDto.isActive ?? true,
       });
 
@@ -152,6 +153,7 @@ export class CombosService {
     if (updateDto.description !== undefined) combo.description = updateDto.description.trim();
     if (updateDto.imageId !== undefined) combo.imageId = updateDto.imageId;
     if (updateDto.imageUrl !== undefined) combo.imageUrl = updateDto.imageUrl.trim();
+    if (updateDto.images !== undefined) combo.images = updateDto.images;
     if (updateDto.isActive !== undefined) combo.isActive = updateDto.isActive;
 
     if (updateDto.price !== undefined) {

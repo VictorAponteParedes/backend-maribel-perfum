@@ -34,6 +34,11 @@ export class UpdateComboDto {
   imageId?: string;
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+
+  @IsOptional()
   @IsString()
   imageUrl?: string;
 

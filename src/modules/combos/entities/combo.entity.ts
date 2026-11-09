@@ -62,6 +62,9 @@ export class ComboEntity {
   @Column({ name: 'image_url', type: 'text', nullable: true })
   imageUrl: string | null;
 
+  @Column({ type: 'jsonb', nullable: true, default: () => "'[]'" })
+  images: string[];
+
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 
