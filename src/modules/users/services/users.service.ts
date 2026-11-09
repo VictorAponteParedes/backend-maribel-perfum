@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -9,6 +10,8 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { UserEntity, UserRole } from '../entities/user.entity';
 import { CreateUserDto } from '../dto/create-user.dto';
+import { UpdateUserDto } from '../dto/update-user.dto';
+import { FilterUsersDto } from '../dto/filter-users.dto';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/enums/permission.enum';
 
 @Injectable()
@@ -20,6 +23,33 @@ export class UsersService implements OnModuleInit {
 
   async onModuleInit() {
     await this.seedAdminUser();
+  }
+
+  async findAll(filterDto?: FilterUsersDto): Promise<UserEntity[]> {
+    const query = this.userRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.avatar', 'avatar')
+      .orderBy('user.createdAt', 'DESC');
+
+    if (filterDto?.search) {
+      const search = `%${filterDto.search.toLowerCase().trim()}%`;
+      query.andWhere(
+        '(LOWER(user.fullName) LIKE :search OR LOWER(user.email) LIKE :search)',
+        { search },
+      );
+    }
+
+    if (filterDto?.role) {
+      query.andWhere('user.role = :role', { role: filterDto.role });
+    }
+
+    if (filterDto?.isActive !== undefined) {
+      query.andWhere('user.isActive = :isActive', {
+        isActive: filterDto.isActive,
+      });
+    }
+
+    return await query.getMany();
   }
 
   async findByEmail(
@@ -79,6 +109,77 @@ export class UsersService implements OnModuleInit {
     });
 
     return await this.userRepository.save(user);
+  }
+
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<UserEntity> {
+    const user = await this.findById(id);
+
+    if (updateUserDto.fullName !== undefined) {
+      user.fullName = updateUserDto.fullName.trim();
+    }
+
+    if (updateUserDto.avatarId !== undefined) {
+      user.avatarId = updateUserDto.avatarId;
+    }
+
+    if (updateUserDto.isActive !== undefined) {
+      user.isActive = updateUserDto.isActive;
+    }
+
+    if (updateUserDto.role !== undefined && updateUserDto.role !== user.role) {
+      user.role = updateUserDto.role;
+      // Si no se pasaron permisos personalizados explícitos, sincronizar con los del nuevo rol
+      if (!updateUserDto.permissions) {
+        user.permissions = DEFAULT_ROLE_PERMISSIONS[user.role];
+      }
+    }
+
+    if (updateUserDto.permissions !== undefined) {
+      user.permissions = updateUserDto.permissions;
+    }
+
+    return await this.userRepository.save(user);
+  }
+
+  async toggleStatus(id: string, currentUserId: string): Promise<UserEntity> {
+    if (id === currentUserId) {
+      throw new BadRequestException('No puedes desactivar tu propia cuenta.');
+    }
+
+    const user = await this.findById(id);
+    user.isActive = !user.isActive;
+
+    // Si se desactiva, invalidar su refresh token
+    if (!user.isActive) {
+      user.refreshToken = null;
+    }
+
+    return await this.userRepository.save(user);
+  }
+
+  async resetPassword(id: string, newPassword: string): Promise<void> {
+    const user = await this.findById(id);
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    user.password = hashedPassword;
+    user.refreshToken = null;
+
+    await this.userRepository.save(user);
+  }
+
+  async remove(id: string, currentUserId: string): Promise<{ success: boolean; message: string }> {
+    if (id === currentUserId) {
+      throw new BadRequestException('No puedes eliminar tu propia cuenta.');
+    }
+
+    await this.findById(id);
+    await this.userRepository.softDelete(id);
+
+    return {
+      success: true,
+      message: 'Usuario eliminado exitosamente.',
+    };
   }
 
   async updateRefreshToken(
