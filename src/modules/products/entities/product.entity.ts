@@ -94,6 +94,9 @@ export class ProductEntity {
   @JoinColumn({ name: 'image_id' })
   image: FileEntity | null;
 
+  @Column({ name: 'image_url', type: 'text', nullable: true })
+  imageUrl: string | null;
+
   @Column({ type: 'jsonb', nullable: true, default: () => "'[]'" })
   images: string[];
 

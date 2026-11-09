@@ -20,11 +20,15 @@ import {
   imageFileFilter,
   multerDiskStorage,
 } from '../helpers/file-upload.helper';
+import { Public } from '../../../common/decorators/public.decorator';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { Permission } from '../../../common/enums/permission.enum';
 
 @Controller('files')
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
+  @RequirePermissions(Permission.FILES_UPLOAD)
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -40,6 +44,7 @@ export class FilesController {
     return await this.filesService.saveFile(file, altText);
   }
 
+  @RequirePermissions(Permission.FILES_UPLOAD)
   @Post('upload-multiple')
   @UseInterceptors(
     FilesInterceptor('files', 10, {
@@ -54,11 +59,13 @@ export class FilesController {
     return await this.filesService.saveMultipleFiles(files);
   }
 
+  @Public()
   @Get(':id')
   async getFileMetadata(@Param('id') id: string) {
     return await this.filesService.findById(id);
   }
 
+  @Public()
   @Get('stream/:filename')
   async streamFile(
     @Param('filename') filename: string,
@@ -68,6 +75,7 @@ export class FilesController {
     res.sendFile(physicalPath);
   }
 
+  @RequirePermissions(Permission.FILES_UPLOAD)
   @Patch(':id')
   async updateMetadata(
     @Param('id') id: string,
@@ -76,6 +84,7 @@ export class FilesController {
     return await this.filesService.update(id, updateDto);
   }
 
+  @RequirePermissions(Permission.PRODUCTS_DELETE)
   @Delete(':id')
   async deleteFile(@Param('id') id: string) {
     return await this.filesService.remove(id);

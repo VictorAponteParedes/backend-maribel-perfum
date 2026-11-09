@@ -25,12 +25,12 @@ export class CreateUserDto {
 
   @IsOptional()
   @IsEnum(UserRole)
-  role?: UserRole = UserRole.STAFF;
+  role?: UserRole;
 
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  permissions?: string[] = ['*'];
+  permissions?: string[];
 
   @IsOptional()
   @IsUUID()

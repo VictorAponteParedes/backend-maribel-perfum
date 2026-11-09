@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { UserEntity, UserRole } from '../entities/user.entity';
 import { CreateUserDto } from '../dto/create-user.dto';
+import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/enums/permission.enum';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
@@ -61,12 +62,18 @@ export class UsersService implements OnModuleInit {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(createUserDto.password, salt);
 
+    const assignedRole = createUserDto.role ?? UserRole.STAFF;
+    const assignedPermissions =
+      createUserDto.permissions && createUserDto.permissions.length > 0
+        ? createUserDto.permissions
+        : DEFAULT_ROLE_PERMISSIONS[assignedRole];
+
     const user = this.userRepository.create({
       email: createUserDto.email.toLowerCase().trim(),
       password: hashedPassword,
       fullName: createUserDto.fullName.trim(),
-      role: createUserDto.role ?? UserRole.STAFF,
-      permissions: createUserDto.permissions ?? ['*'],
+      role: assignedRole,
+      permissions: assignedPermissions,
       avatarId: createUserDto.avatarId ?? null,
       isActive: true,
     });

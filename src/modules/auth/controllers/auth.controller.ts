@@ -3,15 +3,15 @@ import {
   Controller,
   Get,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from '../services/auth.service';
 import { LoginDto } from '../dto/login.dto';
 import { RegisterDto } from '../dto/register.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { UserRole } from '../../users/entities/user.entity';
 
 @Controller('auth')
 export class AuthController {
@@ -23,7 +23,7 @@ export class AuthController {
     return await this.authService.login(loginDto);
   }
 
-  @Public()
+  @Roles(UserRole.ADMIN)
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     return await this.authService.register(registerDto);
@@ -35,7 +35,6 @@ export class AuthController {
     return await this.authService.refreshToken(refreshTokenDto.refreshToken);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('profile')
   async getProfile(@CurrentUser('id') userId: string) {
     return await this.authService.getProfile(userId);
