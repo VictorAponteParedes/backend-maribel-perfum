@@ -11,7 +11,12 @@ import { CreateSaleDto } from '../dto/create-sale.dto';
 import { FilterSalesDto } from '../dto/filter-sales.dto';
 import { ProductEntity } from '../../products/entities/product.entity';
 import { InventoryStockEntity } from '../../products/entities/inventory-stock.entity';
-import { OrderEntity, OrderStatus, PaymentStatus } from '../../orders/entities/order.entity';
+import {
+  OrderEntity,
+  OrderStatus,
+  PaymentStatus,
+} from '../../orders/entities/order.entity';
+import { ComboEntity } from '../../combos/entities/combo.entity';
 
 function normalizeDate(str?: string): string | null {
   if (!str) return null;
@@ -38,7 +43,14 @@ export class SalesService {
   ) {}
 
   async findAll(filterDto: FilterSalesDto) {
-    const { search, startDate, endDate, status, page = 1, limit = 50 } = filterDto;
+    const {
+      search,
+      startDate,
+      endDate,
+      status,
+      page = 1,
+      limit = 50,
+    } = filterDto;
 
     const query = this.saleRepository
       .createQueryBuilder('sale')
@@ -70,16 +82,22 @@ export class SalesService {
 
     const normalizedStart = normalizeDate(startDate);
     if (normalizedStart) {
-      query.andWhere("TO_CHAR(sale.createdAt, 'YYYY-MM-DD') >= :normalizedStart", {
-        normalizedStart,
-      });
+      query.andWhere(
+        "TO_CHAR(sale.createdAt, 'YYYY-MM-DD') >= :normalizedStart",
+        {
+          normalizedStart,
+        },
+      );
     }
 
     const normalizedEnd = normalizeDate(endDate);
     if (normalizedEnd) {
-      query.andWhere("TO_CHAR(sale.createdAt, 'YYYY-MM-DD') <= :normalizedEnd", {
-        normalizedEnd,
-      });
+      query.andWhere(
+        "TO_CHAR(sale.createdAt, 'YYYY-MM-DD') <= :normalizedEnd",
+        {
+          normalizedEnd,
+        },
+      );
     }
 
     query
@@ -121,7 +139,9 @@ export class SalesService {
 
   async create(createDto: CreateSaleDto) {
     if (!createDto.items || createDto.items.length === 0) {
-      throw new BadRequestException('La venta debe incluir al menos un producto.');
+      throw new BadRequestException(
+        'La venta debe incluir al menos un producto.',
+      );
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -129,6 +149,18 @@ export class SalesService {
     await queryRunner.startTransaction();
 
     try {
+      if (createDto.orderId) {
+        const existingSale = await queryRunner.manager.findOne(SaleEntity, {
+          where: { orderId: createDto.orderId },
+        });
+
+        if (existingSale) {
+          throw new BadRequestException(
+            `Este pedido ya fue facturado previamente en el comprobante "${existingSale.saleNumber}". No se permite duplicar la facturación.`,
+          );
+        }
+      }
+
       const saleNumber = await this.generateSaleNumber();
 
       let total = 0;
@@ -141,11 +173,20 @@ export class SalesService {
         total += itemSubtotal;
         totalQuantity += item.quantity;
 
-        // 1. Buscar producto por código de barras si no viene productId
+        // 1. Buscar producto por código de barras o UUID si no viene productId
         let productId = item.productId ?? null;
+        const isUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            item.barcode,
+          );
+
         if (!productId) {
+          const whereConditions: any[] = [{ barcode: item.barcode }];
+          if (isUuid) {
+            whereConditions.push({ id: item.barcode });
+          }
           const product = await queryRunner.manager.findOne(ProductEntity, {
-            where: { barcode: item.barcode },
+            where: whereConditions,
           });
           if (product) {
             productId = product.id;
@@ -167,14 +208,38 @@ export class SalesService {
 
         // 2. Descontar stock de inventario automáticamente
         if (productId) {
-          const stock = await queryRunner.manager.findOne(InventoryStockEntity, {
-            where: { productId },
-          });
+          const stock = await queryRunner.manager.findOne(
+            InventoryStockEntity,
+            {
+              where: { productId },
+            },
+          );
 
           if (stock) {
             stock.currentStock -= item.quantity;
             stock.totalSold += item.quantity;
             await queryRunner.manager.save(InventoryStockEntity, stock);
+          }
+        } else if (isUuid) {
+          const combo = await queryRunner.manager.findOne(ComboEntity, {
+            where: { id: item.barcode },
+            relations: { items: true },
+          });
+          if (combo && combo.items) {
+            for (const cItem of combo.items) {
+              const stock = await queryRunner.manager.findOne(
+                InventoryStockEntity,
+                {
+                  where: { productId: cItem.productId },
+                },
+              );
+              if (stock) {
+                const qtyToDeduct = cItem.quantity * item.quantity;
+                stock.currentStock -= qtyToDeduct;
+                stock.totalSold += qtyToDeduct;
+                await queryRunner.manager.save(InventoryStockEntity, stock);
+              }
+            }
           }
         }
       }

@@ -85,13 +85,37 @@ export class WebSettingsService implements OnModuleInit {
   async updateSettings(dto: UpdateWebSettingsDto): Promise<WebSettingEntity> {
     const setting = await this.getSettings();
 
-    if (dto.announcementText !== undefined) setting.announcementText = dto.announcementText;
-    if (dto.announcementActive !== undefined) setting.announcementActive = dto.announcementActive;
-    if (dto.freeShippingThreshold !== undefined) setting.freeShippingThreshold = dto.freeShippingThreshold;
-    if (dto.whatsappNumber !== undefined) setting.whatsappNumber = dto.whatsappNumber;
+    if (dto.tradeName !== undefined) setting.tradeName = dto.tradeName;
+    if (dto.storeBio !== undefined) setting.storeBio = dto.storeBio;
+    if (dto.legalName !== undefined) setting.legalName = dto.legalName;
+    if (dto.taxId !== undefined) setting.taxId = dto.taxId;
+    if (dto.whatsappNumber !== undefined)
+      setting.whatsappNumber = dto.whatsappNumber;
+    if (dto.businessPhone !== undefined)
+      setting.businessPhone = dto.businessPhone;
     if (dto.storeAddress !== undefined) setting.storeAddress = dto.storeAddress;
+    if (dto.address !== undefined) setting.storeAddress = dto.address;
+    if (dto.city !== undefined) setting.city = dto.city;
+    if (dto.country !== undefined) setting.country = dto.country;
+    if (dto.mapsUrl !== undefined) setting.mapsUrl = dto.mapsUrl;
+    if (dto.openingHours !== undefined) setting.openingHours = dto.openingHours;
+    if (dto.instagramUrl !== undefined) setting.instagramUrl = dto.instagramUrl;
+    if (dto.facebookUrl !== undefined) setting.facebookUrl = dto.facebookUrl;
+    if (dto.tiktokUrl !== undefined) setting.tiktokUrl = dto.tiktokUrl;
+    if (dto.logoUrl !== undefined) setting.logoUrl = dto.logoUrl;
+    if (dto.footerCopyright !== undefined)
+      setting.footerCopyright = dto.footerCopyright;
+
+    // Ajustes web y marketing
+    if (dto.announcementText !== undefined)
+      setting.announcementText = dto.announcementText;
+    if (dto.announcementActive !== undefined)
+      setting.announcementActive = dto.announcementActive;
+    if (dto.freeShippingThreshold !== undefined)
+      setting.freeShippingThreshold = dto.freeShippingThreshold;
     if (dto.bankDetails !== undefined) setting.bankDetails = dto.bankDetails;
-    if (dto.deliveryRates !== undefined) setting.deliveryRates = dto.deliveryRates;
+    if (dto.deliveryRates !== undefined)
+      setting.deliveryRates = dto.deliveryRates;
 
     return await this.settingsRepository.save(setting);
   }
@@ -121,7 +145,10 @@ export class WebSettingsService implements OnModuleInit {
     return await this.campaignRepository.save(campaign);
   }
 
-  async updateCampaign(id: string, dto: UpdateCampaignDto): Promise<CampaignEntity> {
+  async updateCampaign(
+    id: string,
+    dto: UpdateCampaignDto,
+  ): Promise<CampaignEntity> {
     const campaign = await this.campaignRepository.findOne({ where: { id } });
     if (!campaign) {
       throw new NotFoundException(`Campaña con ID "${id}" no encontrada.`);
@@ -130,11 +157,14 @@ export class WebSettingsService implements OnModuleInit {
     if (dto.title !== undefined) campaign.title = dto.title.trim();
     if (dto.tag !== undefined) campaign.tag = dto.tag.trim();
     if (dto.subtitle !== undefined) campaign.subtitle = dto.subtitle.trim();
-    if (dto.buttonText !== undefined) campaign.buttonText = dto.buttonText.trim();
-    if (dto.buttonLink !== undefined) campaign.buttonLink = dto.buttonLink.trim();
+    if (dto.buttonText !== undefined)
+      campaign.buttonText = dto.buttonText.trim();
+    if (dto.buttonLink !== undefined)
+      campaign.buttonLink = dto.buttonLink.trim();
     if (dto.imageUrl !== undefined) campaign.imageUrl = dto.imageUrl.trim();
     if (dto.isActive !== undefined) campaign.isActive = dto.isActive;
-    if (dto.displayOrder !== undefined) campaign.displayOrder = dto.displayOrder;
+    if (dto.displayOrder !== undefined)
+      campaign.displayOrder = dto.displayOrder;
 
     return await this.campaignRepository.save(campaign);
   }

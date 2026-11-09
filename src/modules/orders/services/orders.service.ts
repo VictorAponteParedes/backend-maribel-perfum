@@ -8,6 +8,7 @@ import { DataSource, Repository } from 'typeorm';
 import { OrderEntity, OrderStatus } from '../entities/order.entity';
 import { OrderItemEntity } from '../entities/order-item.entity';
 import { OrderLocationEntity } from '../entities/order-location.entity';
+import { ProductEntity } from '../../products/entities/product.entity';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { FilterOrdersDto } from '../dto/filter-orders.dto';
 
@@ -114,6 +115,18 @@ export class OrdersService {
         subtotal += itemSubtotal;
         totalQuantity += item.quantity;
 
+        // Validar si el productId existe realmente en la base de datos para no violar la FK
+        let validProductId: string | null = null;
+        if (item.productId) {
+          const productExists = await queryRunner.manager.findOne(
+            ProductEntity,
+            { where: { id: item.productId } }
+          );
+          if (productExists) {
+            validProductId = item.productId;
+          }
+        }
+
         const orderItem = queryRunner.manager.create(OrderItemEntity, {
           barcode: item.barcode,
           brand: item.brand,
@@ -123,7 +136,7 @@ export class OrdersService {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           subtotal: itemSubtotal,
-          productId: item.productId ?? null,
+          productId: validProductId,
         });
 
         orderItems.push(orderItem);
@@ -150,18 +163,32 @@ export class OrdersService {
 
       const savedOrder = await queryRunner.manager.save(OrderEntity, order);
 
-      // Guardar items
+      // Guardar items asociados
       for (const oi of orderItems) {
         oi.orderId = savedOrder.id;
+        oi.order = savedOrder;
         await queryRunner.manager.save(OrderItemEntity, oi);
       }
 
       // Guardar ubicación si fue provista
       if (createDto.location) {
+        const lat =
+          createDto.location.latitude !== undefined &&
+          createDto.location.latitude !== null
+            ? Number(Number(createDto.location.latitude).toFixed(7))
+            : null;
+
+        const lng =
+          createDto.location.longitude !== undefined &&
+          createDto.location.longitude !== null
+            ? Number(Number(createDto.location.longitude).toFixed(7))
+            : null;
+
         const loc = queryRunner.manager.create(OrderLocationEntity, {
           orderId: savedOrder.id,
-          latitude: createDto.location.latitude ?? null,
-          longitude: createDto.location.longitude ?? null,
+          order: savedOrder,
+          latitude: lat,
+          longitude: lng,
           address: createDto.location.address ?? null,
           reference: createDto.location.reference ?? null,
           city: createDto.location.city ?? null,
@@ -172,9 +199,12 @@ export class OrdersService {
       await queryRunner.commitTransaction();
 
       return await this.findById(savedOrder.id);
-    } catch (error) {
+    } catch (error: any) {
       await queryRunner.rollbackTransaction();
-      throw error;
+      console.error('❌ Error en OrdersService.create:', error);
+      throw new BadRequestException(
+        error?.message || 'Error interno al procesar el pedido'
+      );
     } finally {
       await queryRunner.release();
     }
@@ -219,9 +249,22 @@ export class OrdersService {
 
   private async generateOrderNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await this.orderRepository.count();
-    const sequence = String(count + 1).padStart(4, '0');
-    return `ORD-${year}-${sequence}`;
+    const count = await this.orderRepository.count({ withDeleted: true });
+    let sequence = count + 1;
+    let orderNumber = `ORD-${year}-${String(sequence).padStart(4, '0')}`;
+
+    // Si por alguna razón ese número ya existe, buscar el siguiente disponible
+    while (
+      await this.orderRepository.findOne({
+        where: { orderNumber },
+        withDeleted: true,
+      })
+    ) {
+      sequence++;
+      orderNumber = `ORD-${year}-${String(sequence).padStart(4, '0')}`;
+    }
+
+    return orderNumber;
   }
 
   private mapToFrontendOrder(o: OrderEntity) {
