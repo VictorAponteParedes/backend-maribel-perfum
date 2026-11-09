@@ -35,6 +35,10 @@ export class UpdateProductDto {
   category?: string;
 
   @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   images?: string[];

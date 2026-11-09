@@ -134,7 +134,10 @@ export class ProductsService implements OnModuleInit {
           : '',
         isActive: p.isActive,
         imageId: p.imageId ?? null,
-        imageUrl: p.image?.url ?? null,
+        imageUrl: p.imageUrl ?? p.image?.url ?? (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null),
+        images: Array.isArray(p.images) && p.images.length > 0
+          ? p.images
+          : (p.imageUrl || p.image?.url ? [p.imageUrl || p.image?.url] : []),
       };
     });
 
@@ -169,6 +172,19 @@ export class ProductsService implements OnModuleInit {
     if (!product) {
       throw new NotFoundException(`Producto con ID "${id}" no encontrado.`);
     }
+
+    const resolvedImageUrl =
+      product.imageUrl ??
+      product.image?.url ??
+      (Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null);
+
+    const resolvedImages =
+      Array.isArray(product.images) && product.images.length > 0
+        ? product.images
+        : (resolvedImageUrl ? [resolvedImageUrl] : []);
+
+    product.imageUrl = resolvedImageUrl;
+    product.images = resolvedImages;
 
     return product;
   }
@@ -222,7 +238,8 @@ export class ProductsService implements OnModuleInit {
         sellingPrice: createDto.sellingPrice ?? null,
         brandId: brand.id,
         imageId: createDto.imageId ?? null,
-        images: createDto.images ?? [],
+        imageUrl: createDto.imageUrl ?? (createDto.images?.[0] ?? null),
+        images: createDto.images ?? (createDto.imageUrl ? [createDto.imageUrl] : []),
         isActive: createDto.isActive ?? true,
         isWebVisible: createDto.isWebVisible ?? false,
         webBadge: createDto.webBadge ?? null,
@@ -301,7 +318,13 @@ export class ProductsService implements OnModuleInit {
     if (updateDto.costPrice !== undefined) product.costPrice = updateDto.costPrice;
     if (updateDto.sellingPrice !== undefined) product.sellingPrice = updateDto.sellingPrice;
     if (updateDto.imageId !== undefined) product.imageId = updateDto.imageId;
-    if (updateDto.images !== undefined) product.images = updateDto.images;
+    if (updateDto.imageUrl !== undefined) product.imageUrl = updateDto.imageUrl;
+    if (updateDto.images !== undefined) {
+      product.images = updateDto.images;
+      if (updateDto.images.length > 0 && !product.imageUrl) {
+        product.imageUrl = updateDto.images[0];
+      }
+    }
     if (updateDto.isActive !== undefined) product.isActive = updateDto.isActive;
     if (updateDto.isWebVisible !== undefined) product.isWebVisible = updateDto.isWebVisible;
     if (updateDto.webBadge !== undefined) product.webBadge = updateDto.webBadge;
