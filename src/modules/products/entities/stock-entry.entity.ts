@@ -43,6 +43,24 @@ export class StockEntryEntity {
   })
   totalCost: number | null;
 
+  @Column({
+    name: 'previous_average_cost',
+    type: 'numeric',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
+  previousAverageCost: number | null;
+
+  @Column({
+    name: 'new_average_cost',
+    type: 'numeric',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
+  newAverageCost: number | null;
+
   @Column({ name: 'batch_number', type: 'varchar', length: 100, nullable: true })
   batchNumber: string | null;
 

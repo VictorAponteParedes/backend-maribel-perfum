@@ -83,6 +83,12 @@ export class ProductsController {
   }
 
   @RequirePermissions(Permission.PRODUCTS_VIEW)
+  @Get('reports/profitability')
+  async getProfitabilitySummary() {
+    return await this.productsService.getProfitabilitySummary();
+  }
+
+  @RequirePermissions(Permission.PRODUCTS_VIEW)
   @Get('barcode/:barcode')
   async findByBarcode(@Param('barcode') barcode: string) {
     return await this.productsService.findByBarcode(barcode);
@@ -92,6 +98,12 @@ export class ProductsController {
   @Get(':id')
   async findById(@Param('id') id: string) {
     return await this.productsService.findById(id);
+  }
+
+  @RequirePermissions(Permission.PRODUCTS_VIEW)
+  @Get(':id/stock-entries')
+  async findStockEntriesByProductId(@Param('id') id: string) {
+    return await this.productsService.findStockEntriesByProductId(id);
   }
 
   @RequirePermissions(Permission.PRODUCTS_CREATE)

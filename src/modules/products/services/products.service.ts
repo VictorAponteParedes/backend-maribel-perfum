@@ -110,6 +110,7 @@ export class ProductsService implements OnModuleInit {
       const cost = p.costPrice ? Number(p.costPrice) : 0;
       const price = p.sellingPrice ? Number(p.sellingPrice) : 0;
       const profit = price > 0 && cost > 0 ? price - cost : 0;
+      const marginPercent = price > 0 ? Math.round((profit / price) * 100) : 0;
 
       return {
         id: p.id,
@@ -126,6 +127,7 @@ export class ProductsService implements OnModuleInit {
         costPrice: cost,
         price,
         profit,
+        marginPercent,
         isWebVisible: p.isWebVisible ?? false,
         webBadge: p.webBadge ?? null,
         webPrice: p.webPrice ? Number(p.webPrice) : null,
@@ -262,11 +264,14 @@ export class ProductsService implements OnModuleInit {
 
       // Si hubo stock inicial, registrar la primera entrada
       if (initialStock > 0) {
+        const initialCost = createDto.costPrice ? Number(createDto.costPrice) : null;
         const entry = queryRunner.manager.create(StockEntryEntity, {
           productId: savedProduct.id,
           quantity: initialStock,
-          unitCost: createDto.costPrice ?? null,
-          totalCost: createDto.costPrice ? createDto.costPrice * initialStock : null,
+          unitCost: initialCost,
+          totalCost: initialCost ? initialCost * initialStock : null,
+          previousAverageCost: null,
+          newAverageCost: initialCost,
           entryDate: new Date(),
           notes: 'Inventario inicial al crear producto',
         });
@@ -359,14 +364,38 @@ export class ProductsService implements OnModuleInit {
     await queryRunner.startTransaction();
 
     try {
-      const unitCost = dto.unitCost ?? (product.costPrice ? Number(product.costPrice) : null);
-      const totalCost = unitCost ? unitCost * dto.quantity : null;
+      const unitCost = dto.unitCost !== undefined && dto.unitCost !== null
+        ? Number(dto.unitCost)
+        : (product.costPrice ? Number(product.costPrice) : null);
+      const totalCost = unitCost !== null ? unitCost * dto.quantity : null;
+
+      // 1. Cálculo de Costo Promedio Ponderado (PPP)
+      const currentStock = Number(product.stock?.currentStock ?? 0);
+      const previousAverageCost = product.costPrice ? Number(product.costPrice) : null;
+      let newAverageCost: number | null = null;
+
+      if (unitCost !== null) {
+        if (currentStock > 0 && previousAverageCost !== null && previousAverageCost > 0) {
+          const currentTotalValue = currentStock * previousAverageCost;
+          const newEntryValue = dto.quantity * unitCost;
+          const totalUnits = currentStock + dto.quantity;
+          newAverageCost = totalUnits > 0
+            ? Math.round((currentTotalValue + newEntryValue) / totalUnits)
+            : unitCost;
+        } else {
+          newAverageCost = unitCost;
+        }
+      } else {
+        newAverageCost = previousAverageCost;
+      }
 
       const entry = queryRunner.manager.create(StockEntryEntity, {
         productId: product.id,
         quantity: dto.quantity,
         unitCost,
         totalCost,
+        previousAverageCost,
+        newAverageCost,
         batchNumber: dto.batchNumber ?? null,
         entryDate: dto.entryDate ? new Date(dto.entryDate) : new Date(),
         notes: dto.notes ?? null,
@@ -374,7 +403,16 @@ export class ProductsService implements OnModuleInit {
 
       const savedEntry = await queryRunner.manager.save(StockEntryEntity, entry);
 
-      // Actualizar stock
+      // 2. Actualizar el costo promedio ponderado en ProductEntity
+      if (newAverageCost !== null) {
+        await queryRunner.manager.update(
+          ProductEntity,
+          { id: product.id },
+          { costPrice: newAverageCost },
+        );
+      }
+
+      // 3. Actualizar stock
       await queryRunner.manager.increment(
         InventoryStockEntity,
         { productId: product.id },
@@ -455,12 +493,16 @@ export class ProductsService implements OnModuleInit {
               );
 
               // Registrar entrada
+              const safeEntryDate = item.receptionDate ? this.parseSafeDate(item.receptionDate) : new Date();
               const entry = queryRunner.manager.create(StockEntryEntity, {
                 productId: existing.id,
                 quantity,
                 unitCost: item.costPrice ?? null,
                 totalCost: item.costPrice ? item.costPrice * quantity : null,
-                entryDate: item.receptionDate ? new Date(item.receptionDate) : new Date(),
+                previousAverageCost: existing.costPrice ? Number(existing.costPrice) : null,
+                newAverageCost: item.costPrice ? Number(item.costPrice) : null,
+                entryDate: safeEntryDate,
+                batchNumber: (item as { batchNumber?: string }).batchNumber ?? null,
                 notes: 'Carga masiva - Reposición de stock',
               });
               await queryRunner.manager.save(StockEntryEntity, entry);
@@ -468,6 +510,7 @@ export class ProductsService implements OnModuleInit {
             updated++;
           } else {
             // Producto nuevo
+            const safeReceptionDate = item.receptionDate ? this.parseSafeDate(item.receptionDate) : null;
             const newProduct = queryRunner.manager.create(ProductEntity, {
               barcode: item.barcode,
               name: item.name,
@@ -477,7 +520,7 @@ export class ProductsService implements OnModuleInit {
               sellingPrice: item.sellingPrice ?? null,
               brandId: brand.id,
               isActive: true,
-              receptionDate: item.receptionDate ? new Date(item.receptionDate) : null,
+              receptionDate: safeReceptionDate,
             });
             const saved = await queryRunner.manager.save(ProductEntity, newProduct);
 
@@ -497,7 +540,10 @@ export class ProductsService implements OnModuleInit {
                 quantity,
                 unitCost: item.costPrice ?? null,
                 totalCost: item.costPrice ? item.costPrice * quantity : null,
-                entryDate: item.receptionDate ? new Date(item.receptionDate) : new Date(),
+                previousAverageCost: null,
+                newAverageCost: item.costPrice ? Number(item.costPrice) : null,
+                entryDate: safeReceptionDate || new Date(),
+                batchNumber: (item as { batchNumber?: string }).batchNumber ?? null,
                 notes: 'Carga masiva - Stock inicial',
               });
               await queryRunner.manager.save(StockEntryEntity, entry);
@@ -690,19 +736,128 @@ export class ProductsService implements OnModuleInit {
       take: limit,
     });
 
-    return entries.map((e) => ({
-      id: e.id,
-      barcode: e.product?.barcode || '',
-      brand: e.product?.brand?.name || '',
-      name: e.product?.name || '',
-      size: e.product?.size || '',
-      quantity: e.quantity,
-      date: e.entryDate
-        ? new Date(e.entryDate).toLocaleDateString('es-ES')
-        : new Date(e.createdAt).toLocaleDateString('es-ES'),
-      unitCost: Number(e.unitCost || 0),
-      totalCost: Number(e.totalCost || (e.unitCost ? Number(e.unitCost) * e.quantity : 0)),
-      batchNumber: e.batchNumber ?? undefined,
-    }));
+    return entries.map((e) => {
+      const sellingPrice = e.product?.sellingPrice ? Number(e.product.sellingPrice) : 0;
+      const unitCost = Number(e.unitCost || 0);
+      const lotMargin = sellingPrice > 0 && unitCost > 0 ? sellingPrice - unitCost : 0;
+      const lotMarginPercent =
+        sellingPrice > 0 && unitCost > 0 ? Math.round((lotMargin / sellingPrice) * 100) : 0;
+
+      return {
+        id: e.id,
+        productId: e.productId,
+        barcode: e.product?.barcode || '',
+        brand: e.product?.brand?.name || '',
+        name: e.product?.name || '',
+        size: e.product?.size || '',
+        quantity: e.quantity,
+        date: e.entryDate
+          ? new Date(e.entryDate).toLocaleDateString('es-ES')
+          : new Date(e.createdAt).toLocaleDateString('es-ES'),
+        unitCost,
+        totalCost: Number(e.totalCost || (unitCost * e.quantity)),
+        sellingPrice,
+        lotMargin,
+        lotMarginPercent,
+        previousAverageCost: e.previousAverageCost ? Number(e.previousAverageCost) : null,
+        newAverageCost: e.newAverageCost ? Number(e.newAverageCost) : null,
+        batchNumber: e.batchNumber ?? undefined,
+        notes: e.notes ?? undefined,
+      };
+    });
+  }
+
+  async findStockEntriesByProductId(productId: string) {
+    const product = await this.findById(productId);
+    const sellingPrice = product.sellingPrice ? Number(product.sellingPrice) : 0;
+
+    const entries = await this.stockEntryRepository.find({
+      where: { productId: product.id },
+      order: { entryDate: 'DESC', createdAt: 'DESC' },
+    });
+
+    return entries.map((e) => {
+      const unitCost = Number(e.unitCost || 0);
+      const lotMargin = sellingPrice > 0 && unitCost > 0 ? sellingPrice - unitCost : 0;
+      const lotMarginPercent =
+        sellingPrice > 0 && unitCost > 0 ? Math.round((lotMargin / sellingPrice) * 100) : 0;
+
+      return {
+        id: e.id,
+        productId: e.productId,
+        quantity: e.quantity,
+        entryDate: e.entryDate,
+        date: e.entryDate
+          ? new Date(e.entryDate).toLocaleDateString('es-ES')
+          : new Date(e.createdAt).toLocaleDateString('es-ES'),
+        dateFormatted: e.entryDate
+          ? new Date(e.entryDate).toLocaleDateString('es-ES')
+          : new Date(e.createdAt).toLocaleDateString('es-ES'),
+        unitCost,
+        totalCost: Number(e.totalCost || (unitCost * e.quantity)),
+        sellingPrice,
+        lotMargin,
+        lotMarginPercent,
+        batchNumber: e.batchNumber ?? null,
+        previousAverageCost: e.previousAverageCost ? Number(e.previousAverageCost) : null,
+        newAverageCost: e.newAverageCost ? Number(e.newAverageCost) : null,
+        notes: e.notes ?? null,
+        createdAt: e.createdAt,
+      };
+    });
+  }
+
+  async getProfitabilitySummary() {
+    const products = await this.productRepository.find({
+      relations: { brand: true, category: true, stock: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    const report = products.map((p) => {
+      const sellingPrice = p.sellingPrice ? Number(p.sellingPrice) : 0;
+      const costPrice = p.costPrice ? Number(p.costPrice) : 0;
+      const margin = sellingPrice > 0 && costPrice > 0 ? sellingPrice - costPrice : 0;
+      const marginPercent = sellingPrice > 0 ? Math.round((margin / sellingPrice) * 100) : 0;
+      const currentStock = p.stock?.currentStock ?? 0;
+      const totalInventoryCost = currentStock * costPrice;
+      const totalInventorySale = currentStock * sellingPrice;
+      const projectedProfit = currentStock * margin;
+
+      return {
+        id: p.id,
+        barcode: p.barcode,
+        name: p.name,
+        brand: p.brand?.name ?? '',
+        category: p.category?.name ?? '',
+        currentStock,
+        costPrice,
+        sellingPrice,
+        margin,
+        marginPercent,
+        totalInventoryCost,
+        totalInventorySale,
+        projectedProfit,
+      };
+    });
+
+    return report.sort((a, b) => b.marginPercent - a.marginPercent);
+  }
+
+  private parseSafeDate(dateInput?: string | Date | null): Date {
+    if (!dateInput) return new Date();
+    if (dateInput instanceof Date) return isNaN(dateInput.getTime()) ? new Date() : dateInput;
+    const str = String(dateInput).trim();
+    if (str.includes('/')) {
+      const parts = str.split('/');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+    const parsed = new Date(str);
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
   }
 }
